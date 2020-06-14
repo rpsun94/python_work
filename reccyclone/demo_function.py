@@ -8,6 +8,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.basemap import Basemap
 from RSDttest import RSDttest
 from const import Pi
+import scipy.stats
 
 
 class Reader():
@@ -506,7 +507,7 @@ def auto_split_season(data1, date, seasons, seasonname=None, align=False, re='me
             mean_data = []
             while (j + nmonth) <= len(temp_date):
                 mean_date.append(temp_date[j])
-                mean_data.append(numpy.mean(temp_data[j:j + nmonth]))
+                mean_data.append(numpy.mean(temp_data[j:j + nmonth],axis=0))
                 j += nmonth
             dic[seasonname[i]] = {
                 'date': mean_date,
@@ -533,7 +534,7 @@ def auto_split_season(data1, date, seasons, seasonname=None, align=False, re='me
             mean_data = []
             while (j + nmonth) <= len(temp_date):
                 mean_date.append(temp_date[j])
-                mean_data.append(numpy.sum(temp_data[j:j + nmonth]))
+                mean_data.append(numpy.sum(temp_data[j:j + nmonth], axis=0))
                 j += nmonth
             dic[seasonname[i]] = {
                 'date': mean_date,
@@ -574,8 +575,10 @@ def get_para(X0):
 
     """
     for j in range(X0.shape[0]):
-        X0[j, :] -= numpy.min(X0[j, :])
-        X0[j, :] /= (numpy.max(X0[j, :]) - numpy.min(X0[j, :]))
+        X0[j, :] -= numpy.mean(X0[j, :])
+        std = numpy.std(X0[j, :])
+        if std != 0:
+            X0[j, :] /= std
     return X0
 
 
@@ -700,7 +703,7 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
     k = 1.5
     kdpi = dpi/100
     figsize = (12*k, 12)
-    fig1 = plt.figure(1, figsize=figsize)
+    fig1 = plt.figure(1, figsize=figsize,dpi=dpi)
     ax = fig1.add_subplot(111)
     m = Basemap(**basemap_option)
     meridians = numpy.arange(0., 360., 90.)
@@ -712,7 +715,7 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
                         fontsize=fz, linewidth=0)
     elif rotation:
         items = m.drawmeridians(meridians, labels=[1, 1, 1, 1],
-                                fontsize=fz, linewidth=0, textcolor='white')
+                                fontsize=fz, linewidth=0, textcolor='white',xoffset=300000,yoffset=300000)
         for item in items:
             text = items[item][1][0]
             ax.text(s=text._text,
@@ -769,7 +772,10 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
                             linewidths=2)
             if 'clabel' in key_:
                 if data_contour[key]['clabel']:
-                    plt.clabel(cs2, inline=True, fontsize=fz*0.75)
+                    fmt='%1.3f'
+                    if 'fmt' in key_:
+                        fmt = data_contour[key]['fmt']
+                    plt.clabel(cs2, inline=True, fontsize=fz*0.75,fmt=fmt)
     if scatter:
         keys = list(data_scatter.keys())
         for key in keys:
@@ -809,14 +815,63 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
                            y[numpy.where(data == i)],
                            s=5*kdpi, c=colors[i], label=labels[i])
             A.append(a)
+
+    if plot:
+        keys = list(data_plot.keys())
+        for key in keys:
+            #print(key)
+            key_ = list(data_plot[key].keys())
+            lon = data_plot[key]['lon']
+            lat = data_plot[key]['lat']
+            option = {}
+            option['c'] = data_plot[key]['color']
+            option['linewidth'] = data_plot[key]['linewidth']
+            if 'latlon' in key_:
+                option['latlon'] = data_plot[key]['latlon']
+            if 'zorder' in key_:
+                option['zorder'] = data_plot[key]['zorder']
+            if 'alpha' in key_:
+                option['alpha'] = data_plot[key]['alpha']
+            m.plot(lon, lat, **option)
+
     if scatter_latlon:
         keys = list(data_scatter_latlon.keys())
+        A = []
         for key in keys:
+            # print(key)
+            key_ = list(data_scatter_latlon[key].keys())
             data_ = data_scatter_latlon[key]['data']
             colors = data_scatter_latlon[key]['colors']
-            m.scatter(data_[:, 1],
-                      data_[:, 0],
-                      s=25*kdpi, c=colors, latlon=True)
+            label=None
+            if 'label' in key_:
+                label = data_scatter_latlon[key]['label']
+            marker = '.'
+            if 'marker' in key_:
+                marker = data_scatter_latlon[key]['marker']
+            s = 10
+            if 's' in key_:
+                s = data_scatter_latlon[key]['s']
+            latlon=True
+            if 'latlon' in key_:
+                latlon = data_scatter_latlon[key]['latlon']
+            zorder=1
+            if 'zorder' in key_:
+                zorder = data_scatter_latlon[key]['zorder']
+            alpha = 1
+            if 'alpha' in key_:
+                alpha = data_scatter_latlon[key]['alpha']
+            if len(data_.shape)==2:
+                a = m.scatter(data_[:, 1],
+                          data_[:, 0],
+                          s=s*kdpi, c=colors, latlon=latlon,
+                          label=label,marker=marker,zorder=zorder,alpha=alpha)
+            elif len(data_.shape)==1:
+                a = m.scatter(data_[1],
+                          data_[0],
+                          s=s*kdpi, c=colors, latlon=latlon,
+                          label=label,marker=marker,zorder=zorder,alpha=alpha)
+            #print('finished')
+            A.append(a)
     if quiver:
         keys = list(data_quiver.keys())
         for key in keys:
@@ -861,18 +916,6 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
             pp = 1
             if basemap_option['projection'] == 'npstere':
                 pp = 1.5
-    if plot:
-        keys = list(data_plot.keys())
-        for key in keys:
-            key_ = list(data_plot[key].keys())
-            lon = data_plot[key]['lon']
-            lat = data_plot[key]['lat']
-            option = {}
-            option['c'] = data_plot[key]['color']
-            option['linewidth'] = data_plot[key]['linewidth']
-            if 'latlon' in key_:
-                option['latlon'] = data_plot[key]['latlon']
-            m.plot(lon, lat, **option)
     if contourf and (not nobar):
         cax = divider.append_axes(houkou, size=percent, pad=pp)
         bar = plt.colorbar(CS[0], cax=cax, orientation=vector)
@@ -888,10 +931,15 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
         if ('labels' in key_):
             plt.legend(handles=A, loc='center right',
                        bbox_to_anchor=(1, 1), fontsize=fz)
+    if scatter_latlon:
+        if ('label' in key_):
+            plt.legend(handles=A, loc='center left',
+                       bbox_to_anchor=(1, 1), fontsize=fz)
     if title:
         plt.title(title, fontsize=titlesize,pad=0.05*figsize[1]*100)
     if save:
-        plt.savefig(name, dpi=dpi, bbox_inches='tight')
+        print('saving')
+        plt.savefig(name, dpi=fig1.dpi, bbox_inches='tight')
     elif not save:
         plt.show()
     if contourf and nobar:
@@ -899,14 +947,14 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
             size_bar = (figsize[0]*size_percent, figsize[1])
         elif vector == 'horizontal':
             size_bar = (figsize[0], figsize[1]*size_percent,)
-        fig2 = plt.figure(2, figsize=size_bar)
+        fig2 = plt.figure(2, figsize=size_bar, dpi=dpi)
         cax = fig2.add_subplot(111)
         bar = plt.colorbar(CS[0], cax=cax, orientation=vector)
         if 'label' in key_:
             cblabel = data_contourf[key]['label']
             bar.set_label(cblabel, fontdict=font)
         bar.ax.tick_params(labelsize=fz)
-        plt.savefig(name+'_bar.png', dpi=dpi, bbox_inches='tight')
+        plt.savefig(name+'_bar.png',dpi=fig2.dpi, bbox_inches='tight')
         plt.close(fig2)
     plt.close(fig1)
 
@@ -914,7 +962,7 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
 def paint_timeseries(x, dic_y, xlabel, ylabel, name,
                      dpi=300, save=True, make_legend=False, str_x=False,
                      loc='center right', figsize=(18, 12), fz=40,
-                     minor=False):
+                     minor=False,style='line',rotation='auto',y_lim=False):
     """Paint timeseries
 
 
@@ -968,13 +1016,22 @@ def paint_timeseries(x, dic_y, xlabel, ylabel, name,
         linestyle = 'o-'
         if 'linestyle' in key_:
             linestyle = dic_y_['linestyle']
+        linewidth = '5'
+        if 'linewidth' in key_:
+            linewidth = dic_y_['linewidth']
+        width=0.8
+        if 'width' in key_:
+            width=dic_y_['width']
         x_ = xt
         if 'x' in key_:
             x_ = dic_y_['x']
         if 'label' in key_:
             label = dic_y_['label']
-        a1, = plt.plot(x_, y, linestyle, c=color, linewidth=5,
-                       ms=10, label=label)
+        if style=='line':
+            a1, = plt.plot(x_, y, linestyle, c=color, linewidth=linewidth,
+                           ms=10, label=label)
+        elif style=='bar':
+            a1 = plt.bar(x_, y,color=color,label=label,width=width)
         if 'RSDttest' in key_:
             cc = dic_y_['RSDcolor']
             T = dic_y_['RSDttest']
@@ -991,10 +1048,19 @@ def paint_timeseries(x, dic_y, xlabel, ylabel, name,
             cc = dic_y_['trend']
             p = numpy.polyfit(x_, y, 1)
             y_ = numpy.polyval(p, x_)
-            plt.plot(x_, y_, c=cc, linewidth=4)
+            r,pp = scipy.stats.pearsonr(x_,y)
+            if pp>0.1:
+                cp = cc[0]
+            elif 0.1>=pp>0.05:
+                cp = cc[1]
+            elif pp<0.05:
+                cp = cc[2]
+            plt.plot(x_, y_, c=cp, linewidth=4)
         if not (label is None):
             A.append(a1)
     plt.xlim(xt[0], xt[-1])
+    if y_lim:
+        plt.ylim(y_lim[0], y_lim[1])
     if str_x:
         plt.xticks(xt, x)
     ax.spines['right'].set_visible(False)
@@ -1003,7 +1069,11 @@ def paint_timeseries(x, dic_y, xlabel, ylabel, name,
     ax.spines['bottom'].set_linewidth(4)
     ax.yaxis.set_ticks_position('left')
     ax.xaxis.set_ticks_position('bottom')
-    fig1.autofmt_xdate()
+    if rotation=='auto':
+        fig1.autofmt_xdate()
+    else:
+        for tick in ax.get_xticklabels():
+            tick.set_rotation(int(rotation))
     plt.xlabel(xlabel, fontsize=fz)
     plt.ylabel(ylabel, fontsize=fz)
     # ax.grid(color='gray', linestyle='-.', linewidth=1)
@@ -1155,21 +1225,17 @@ def eof(data, standard=False):  # (data,time)
     import scipy.linalg
     import numpy
     import math
-    from demo_function import mean_data
     ndata = data.shape[0]
     ntime = data.shape[1]
     time = list(range(0, ntime))
     aa = numpy.ones((ndata, ntime)) - 1
-    option = {
-        'order': ['data', 'time'],
-        'standard': 'time',
-        'range': time,
-    }
-    mean_a = mean_data(data, option)
+    mean_a = numpy.mean(data, axis=1)
     for i in time:
         aa[:, i] = data[:, i] - mean_a
     if standard:
-        aa = get_para(aa)
+        for i in range(ndata):
+            if numpy.std(aa[i, :])!=0:
+                aa[i, :]/=numpy.std(aa[i, :])
     u, s, vh = scipy.linalg.svd(aa)
     # different from matlab, in python a = u*ss*vh;while in mtlab, a = u*ss*vh'
     # print(u)
@@ -1422,3 +1488,106 @@ def multi_intersection(arr1, arr2):
     arr2_view = arr2.view([('', arr2.dtype)]*arr2.shape[1])
     intersected = numpy.intersect1d(arr1_view, arr2_view)
     return intersected.view(arr1.dtype).reshape(-1, arr1.shape[1])
+
+def iner_point(vertex_list, x_range, y_range):
+    # vertex:(x,y)
+    # vertex_list should be ordered!
+    # x_range and y_range should be linear
+    import numpy
+    def intersection(A, B):
+        answer = list(set(A).intersection(set(B)))
+        return answer
+
+
+    def iner(vertex_list, point):
+        # return 1 means iner
+        # return 0 means outer
+        # !!linking a point and vertexs directionally,if the point is an iner point ,the sum of the direction angles(whoes abs < 180)
+        # !!should be (2k+1)*2Pi ,while it should be (2k)*2Pi for an outer point , where k belongs to K+.
+        n = len(vertex_list)
+        vector = numpy.ones([n + 1], dtype='complex') - 1
+        ang = numpy.ones([n]) - 1
+        for i in range(n):
+            vector[i] = (-point[0] + vertex_list[i][0]) + (-point[1] + vertex_list[i][1]) * 1j
+            vector[i] /= abs(vector[i])
+        vector[-1] = vector[0]
+        for i in range(n):
+            cc = (vector[i + 1] * vector[i].conjugate()).real
+            sig = (vector[i + 1] / vector[i]).imag
+            if sig >= 0:
+                sig = 1
+            elif sig < 0:
+                sig = -1
+            if cc >= 0:
+                cc = min(cc, 1)
+            elif cc < 0:
+                cc = max(-1, cc)
+            ang[i] = numpy.arccos(cc) * sig
+        return int(sum(ang) / 6.28) % 2
+    vertex_list = list(vertex_list)
+    vertex_x_list = [vertex[0] for vertex in vertex_list]
+    vertex_y_list = [vertex[1] for vertex in vertex_list]
+    x_min = min(vertex_x_list)
+    x_max = max(vertex_x_list)
+    y_min = min(vertex_y_list)
+    y_max = max(vertex_y_list)
+    x_range = numpy.array(x_range)
+    y_range = numpy.array(y_range)
+    x_lim_1 = list(x_range[numpy.where((x_range >= x_min))])
+    y_lim_1 = list(y_range[numpy.where((y_range >= y_min))])
+    x_lim_2 = list(x_range[numpy.where((x_range <= x_max))])
+    y_lim_2 = list(y_range[numpy.where((y_range <= y_max))])
+    x_lim = intersection(x_lim_1, x_lim_2)
+    y_lim = intersection(y_lim_1, y_lim_2)
+    point_temp = []
+    for xx in x_lim:
+        for yy in y_lim:
+            if (xx, yy) not in vertex_list:
+                # print([xx,yy])
+                point_temp.append((xx, yy))
+    # print(x_min,x_max,y_min,y_max,x_lim,y_lim)
+    iner_points = []
+    for point in point_temp:
+        # print(point)
+        if iner(vertex_list, point) == 1:
+            iner_points.append(point)
+    iner_points += vertex_list
+    return iner_points
+
+
+def normalize(y):
+    import numpy
+    ans = numpy.array(y)
+    ans[:]-=numpy.min(ans[:])
+    d = numpy.max(ans)-numpy.min(ans)
+    if d!=0:
+        ans/=d
+    return ans
+
+
+def detrend(y):
+    import numpy
+    x = numpy.arange(len(y))
+    p = numpy.polyfit(x,y,1)
+    y_ = numpy.polyval(p, x)
+    x_ = y - y_
+    return x_
+
+
+def move_average(y, delay, omega=None):
+    import numpy
+    if omega is None:
+        omega = numpy.ones((2*delay+1))
+    if len(y)<2*delay+1:
+        print('wrong,y is too short')
+        return None
+    elif len(y)>= 2*delay+1:
+        ans = numpy.ones((len(y)-2*delay))-1
+        for i in range(len(ans)):
+            ans[i] = numpy.mean(y[i:2*delay+1+i]*omega)
+        return ans
+
+
+def remove_average(y, delay, omega=None):
+    ans = y[delay:-1*delay]-move_average(y, delay, omega=omega)
+    return ans

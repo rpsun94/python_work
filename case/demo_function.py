@@ -269,9 +269,7 @@ def interp2(img, shape0, mean=True):
     height, width = img.shape
     # logic_do = False
     emptyImage = numpy.ones((m, n), dtype=numba.float64) - 1
-    if m == height and n == width:
-        emptyImage = img
-    elif m >= height and n >= width:
+    if m >= height and n >= width:
         # logic_do = True
         sh = (m - 1.0) / (height - 1.0)
         sw = (n - 1.0) / (width - 1.0)
@@ -293,7 +291,7 @@ def interp2(img, shape0, mean=True):
                 iq = numpy.array([[1-q, q], [1-q, q]])
                 value = numpy.sum(ii*ip*iq)
                 emptyImage[i, j] = value
-    elif m < height and n < width and mean:
+    if m < height and n < width and mean:
         # logic_do = True
         sh = (height - 1.0) / (m - 1.0)
         sw = (width - 1.0) / (n - 1.0)
@@ -323,7 +321,7 @@ def interp2(img, shape0, mean=True):
                 wed = numpy.int(w_alter[j] + w_right)
                 # print(hst,hed,wst,wed)
                 emptyImage[i, j] = numpy.mean(img[hst:hed + 1, wst:wed + 1])
-    elif m < height and n < width and (not mean):
+    if m < height and n < width and (not mean):
         # logic_do = True
         sh = (height - 1.0) / (m - 1.0)
         sw = (width - 1.0) / (n - 1.0)
@@ -407,7 +405,7 @@ def getcolorbar(name=None, reverse=False):
     import json
     if name is None:
         name = 'BlGrYeOrReVi200'
-    path = r'colormap'
+    path = r'D:\python_work\colormap'
     control_file = open(path + '\\colorbar.json')
     control_dict = json.load(control_file)
     number = control_dict[name]['start_line']
@@ -630,7 +628,7 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
                  pcolor=False, data_pcolor=None,
                  plot=False, data_plot=None,
                  title=False, nobar=False, vector='vertical',titlesize=30,
-                 dpi=300,rotation=False,fz = 40,tight=True):
+                 dpi=300,rotation=False,fz = 40):
     """
 
 
@@ -704,27 +702,19 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
         yy[index] = lat[iy]
     k = 1.5
     kdpi = dpi/100
-    labels = [1,1,1,1]
-    if basemap_option['projection'] == 'cyl':
-        dlat = abs(basemap_option['urcrnrlat']-basemap_option['llcrnrlat'])
-        dlon = abs(basemap_option['urcrnrlon']-basemap_option['llcrnrlon'])
-        k=dlon/dlat*1
-        labels = [1,0,0,0]
     figsize = (12*k, 12)
     fig1 = plt.figure(1, figsize=figsize,dpi=dpi)
     ax = fig1.add_subplot(111)
     m = Basemap(**basemap_option)
-    meridians = numpy.arange(0., 360., 45.)
+    meridians = numpy.arange(0., 360., 90.)
     parallels = numpy.arange(-90., 91., 30.)
     x, y = m(xx, yy)
-    m.drawparallels(parallels, labels=labels, fontsize=fz, linewidth=0)
-    if basemap_option['projection'] == 'cyl':
-        m.drawmeridians(meridians, labels=[0,0,0,1], fontsize=fz, linewidth=0)
+    m.drawparallels(parallels, labels=[1, 1, 1, 1], fontsize=fz, linewidth=0)
     if not rotation:
-        m.drawmeridians(meridians, labels=labels,
+        m.drawmeridians(meridians, labels=[1, 1, 1, 1],
                         fontsize=fz, linewidth=0)
     elif rotation:
-        items = m.drawmeridians(meridians, labels=labels,
+        items = m.drawmeridians(meridians, labels=[1, 1, 1, 1],
                                 fontsize=fz, linewidth=0, textcolor='white',xoffset=300000,yoffset=300000)
         for item in items:
             text = items[item][1][0]
@@ -776,13 +766,10 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
             if 'mask' in key_:
                 mask = data_contour[key]['mask']
                 data = numpy.ma.array(data=data, mask=mask)
-            linewidths = 2
-            if 'linewidth' in key_:
-                linewidths = data_contour[key]['linewidths']
             levels = data_contour[key]['levels']
             colors = data_contour[key]['colors']
             cs2 = m.contour(x, y, data, levels=levels, colors=colors,
-                            linewidths=linewidths)
+                            linewidths=2)
             if 'clabel' in key_:
                 if data_contour[key]['clabel']:
                     fmt='%1.3f'
@@ -832,7 +819,7 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
     if plot:
         keys = list(data_plot.keys())
         for key in keys:
-            print(key)
+            #print(key)
             key_ = list(data_plot[key].keys())
             lon = data_plot[key]['lon']
             lat = data_plot[key]['lat']
@@ -952,10 +939,7 @@ def paint_figure(lat, lon, basemap_option, name, save=True,
         plt.title(title, fontsize=titlesize,pad=0.05*figsize[1]*100)
     if save:
         print('saving')
-        if tight:
-            plt.savefig(name, dpi=fig1.dpi, bbox_inches='tight')
-        elif not tight:
-            plt.savefig(name,dpi=fig1.dpi)
+        plt.savefig(name, dpi=fig1.dpi, bbox_inches='tight')
     elif not save:
         plt.show()
     if contourf and nobar:
@@ -1607,33 +1591,3 @@ def move_average(y, delay, omega=None):
 def remove_average(y, delay, omega=None):
     ans = y[delay:-1*delay]-move_average(y, delay, omega=omega)
     return ans
-
-
-def make_dism(distance_map,size):
-    import numpy as np
-    import math
-    print(distance_map.shape)
-    M,N = distance_map.shape
-    for ii in range(distance_map.shape[1]):
-        distance_map[:,ii] = normalize(distance_map[:,ii])
-    ll = M
-    dism = np.ones((ll,ll))-1
-    plist = [[math.floor(i/size),int(i%size)] for i in range(ll)]  #y,x
-    for i in range(ll):
-        for j in range(i+1,ll):
-            dism[i,j]=sum((distance_map[i,:]-distance_map[j,:])**2)**0.5
-            dism[j,i]=dism[i,j]
-    return dism, plist
-
-
-def classify(som, data, winmap):
-    from numpy import sum as npsum
-    default_class = npsum(list(winmap.values())).most_common()[0][0]
-    result = []
-    for d in data:
-        win_position = som.winner(d)
-        if win_position in winmap:
-            result.append(winmap[win_position].most_common()[0][0])
-        else:
-            result.append(default_class)
-    return result
